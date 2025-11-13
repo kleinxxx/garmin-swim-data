@@ -1,0 +1,76 @@
+name: Export Swim Data and Deploy to Pages
+
+on:
+  # Run on pushes to the main branch
+  push:
+    branches: [ main ]
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+# Set permissions for the job to write to GitHub Pages
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  # Build job: Converts CSV files to JSON
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          
+      - name: Install dependencies
+        run: pip install pandas
+        
+      - name: Convert CSV files to JSON
+        run: |
+          # Create a directory named 'public' to hold our JSON files
+          mkdir -p public
+          
+          # Run the Python conversion script
+          python - <<'EOF'
+          import pandas as pd
+          
+          # Process swim_intervals.csv
+          try:
+              df_intervals = pd.read_csv("swim_intervals.csv")
+              df_intervals.to_json("public/swim_intervals.json", orient="records")
+              print("Successfully converted swim_intervals.csv")
+          except FileNotFoundError:
+              print("swim_intervals.csv not found, skipping.")
+          
+          # Process swim_summary.csv
+          try:
+              df_summary = pd.read_csv("swim_summary.csv")
+              df_summary.to_json("public/swim_summary.json", orient="records")
+              print("Successfully converted swim_summary.csv")
+          except FileNotFoundError:
+              print("swim_summary.csv not found, skipping.")
+          EOF
+          
+      - name: Upload artifact for Pages
+        uses: actions/upload-pages-artifact@v3
+        with:
+          # Upload the 'public' directory (containing both JSON files)
+          path: 'public'
+
+  # Deploy job: Takes the artifact and publishes it
+  deploy:
+    # Requires the 'build' job to finish first
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      # This URL will be the root of your Pages site
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
